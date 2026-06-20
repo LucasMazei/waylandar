@@ -139,15 +139,15 @@ def _meet_link(event):
     return event.get('hangoutLink', '')
 
 def _rsvp_status(event):
-    """This user's RSVP: accepted / declined / tentative / needsAction.
-    Events with no attendees are the user's own → treated as accepted."""
+    """This user's RSVP: accepted / declined / tentative / needsAction, or
+    'none' for events with no guests (personal blocks)."""
     attendees = event.get('attendees')
     if not attendees:
-        return 'accepted'
+        return 'none'
     for a in attendees:
         if a.get('self'):
             return a.get('responseStatus', 'needsAction')
-    return 'needsAction'
+    return 'none'
 
 def _task_obj(tl, t):
     return {

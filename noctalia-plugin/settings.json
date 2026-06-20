@@ -4,5 +4,5 @@
   "notifyReminders": true,
   "completedTaskDays": 1,
   "eventDaysBack": 1,
-  "autoJoinAcceptedCalls": false
+  "autoJoinAcceptedCalls": true
 }

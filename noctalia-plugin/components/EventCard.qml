@@ -10,6 +10,9 @@ Rectangle {
     signal toggleExpand()
 
     readonly property bool hasMeet: eventData && eventData.meetLink && eventData.meetLink.length > 0
+    readonly property string rsvp: eventData && eventData.rsvp ? eventData.rsvp : "none"
+    readonly property bool noInvitees: rsvp === "none"   // personal block
+    readonly property bool declined: rsvp === "declined"
 
     height: isExpanded ? Math.max(110, 80 + expandedDetails.height) : 55
     Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.OutQuart } }
@@ -17,6 +20,8 @@ Rectangle {
     color: cardMouseArea.containsMouse ? Color.mSurfaceVariant : Color.mSurface
     radius: Style.radiusM
     clip: true
+    // De-emphasise personal (no-guest) and declined events.
+    opacity: (noInvitees || declined) ? 0.55 : 1.0
     Behavior on color { ColorAnimation { duration: Style.animationFast } }
 
     MouseArea {
@@ -41,7 +46,10 @@ Rectangle {
             height: 34
             anchors.verticalCenter: parent.verticalCenter
             radius: 2
-            color: Color.mTertiary
+            // declined → error, personal → muted outline, attending → accent
+            color: card.declined ? Color.mError
+                : card.noInvitees ? Color.mOutline
+                : Color.mTertiary
         }
 
         Column {
@@ -53,7 +61,8 @@ Rectangle {
                 text: eventData ? eventData.title : ""
                 font.pixelSize: Style.fontSizeM
                 font.weight: Style.fontWeightBold
-                color: Color.mOnSurface
+                font.strikeout: card.declined
+                color: (card.declined || card.noInvitees) ? Color.mOnSurfaceVariant : Color.mOnSurface
                 elide: Text.ElideRight
                 width: parent.width
             }

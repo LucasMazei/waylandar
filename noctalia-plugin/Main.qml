@@ -196,6 +196,7 @@ Item {
                 for (var i = 0; i < calendarEvents.length; i++) {
                     var ev = calendarEvents[i]
                     if (!ev.reminders) continue
+                    if (!willAttend(ev)) continue   // only events I'll attend
                     var diffMins = Math.floor((new Date(ev.start).getTime() - now.getTime()) / 60000)
                     if (ev.reminders.indexOf(diffMins) !== -1 && ev.notified_for.indexOf(diffMins) === -1) {
                         var timeStr = formatTime(new Date(ev.start))
@@ -380,6 +381,12 @@ Item {
                     Logger.w("Waylandar", "set-status stderr: " + text.trim())
             }
         }
+    }
+
+    // "Attending" = RSVP'd yes, or a personal block with no guests.
+    function willAttend(ev) {
+        var r = (ev && ev.rsvp) ? ev.rsvp : "none"
+        return r === "accepted" || r === "none"
     }
 
     function nextEvent() {

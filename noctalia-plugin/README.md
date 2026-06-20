@@ -4,7 +4,7 @@ A Google Calendar agenda for the [Noctalia](https://github.com/noctalia-dev/noct
 wrapping [Waylandar](https://github.com/samjoshuadud/waylandar)'s Python OAuth backend.
 
 - **Bar pill** — shows your next event in the tooltip; click to open the panel.
-- **Events tab** — upcoming schedule grouped by day (Today / Tomorrow / weekday); past & ongoing events tucked into a collapsible "Earlier" section. Expandable cards with description + "Open in Browser", plus a **Join** button for events with a Google Meet link.
+- **Events tab** — upcoming schedule grouped by day (Today / Tomorrow / weekday); past & ongoing events tucked into a collapsible "Earlier" section. Expandable cards with description + "Open in Browser", plus a **Join** button for events with a Google Meet link. RSVP-aware styling: personal (no-guest) events are muted grey, **declined** events are dimmed + struck through in the error colour, attending events keep the accent.
 - **Tasks tab** — open Google Tasks grouped by due day; tick the circle to complete or un-complete; completed items shown with their completion time (configurable days back).
 - **Reminders** — `notify-send` alerts based on each event's Google Calendar reminder offsets.
 - **Auto-join** — optionally open accepted calls in the browser ~1 min before they start (RSVP'd-yes only).
