@@ -70,10 +70,12 @@ def get_upcoming_events(creds):
         last_day = calendar.monthrange(year, month)[1]
         end_date = datetime.datetime(year, month, last_day, 23, 59, 59, tzinfo=datetime.timezone.utc)
     else:
+        # Agenda mode: fetch from now forward so the 250-event cap is spent on
+        # UPCOMING events (a packed calendar exhausts the cap before today if we
+        # start at the 1st of the month).
         now = datetime.datetime.now(datetime.timezone.utc)
-        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        last_day = calendar.monthrange(now.year, now.month)[1]
-        end_date = now.replace(day=last_day, hour=23, minute=59, second=59)
+        start_date = now
+        end_date = now + datetime.timedelta(days=31)
     
     timeMin = start_date.isoformat()
     timeMax = end_date.isoformat()
