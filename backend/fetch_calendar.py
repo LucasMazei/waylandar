@@ -7,7 +7,10 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/tasks',  # read + write (mark complete)
+]
 
 def authenticate():
     """Shows basic usage of the Google Calendar API.
@@ -61,22 +64,29 @@ def get_upcoming_events(creds):
 
     service = build('calendar', 'v3', credentials=creds)
 
-    args = [arg for arg in sys.argv if arg != '--background']
+    argv = list(sys.argv[1:])
+    days_back = 1
+    if '--days-back' in argv:
+        idx = argv.index('--days-back')
+        days_back = int(argv[idx + 1])
+        del argv[idx:idx + 2]
+    positional = [a for a in argv if a != '--background']
 
-    if len(args) == 3:
-        year = int(args[1])
-        month = int(args[2])
+    if len(positional) == 2:
+        year = int(positional[0])
+        month = int(positional[1])
         start_date = datetime.datetime(year, month, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
         last_day = calendar.monthrange(year, month)[1]
         end_date = datetime.datetime(year, month, last_day, 23, 59, 59, tzinfo=datetime.timezone.utc)
     else:
-        # Agenda mode: fetch from now forward so the 250-event cap is spent on
-        # UPCOMING events (a packed calendar exhausts the cap before today if we
-        # start at the 1st of the month).
-        now = datetime.datetime.now(datetime.timezone.utc)
-        start_date = now
-        end_date = now + datetime.timedelta(days=31)
-    
+        # Agenda mode: start `days_back` days before today (local) so a small,
+        # de-emphasised slice of recent/ongoing events is available; the 250-event
+        # cap still lands mostly on upcoming items.
+        now_local = datetime.datetime.now().astimezone()
+        midnight = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = midnight - datetime.timedelta(days=days_back)
+        end_date = now_local + datetime.timedelta(days=31)
+
     timeMin = start_date.isoformat()
     timeMax = end_date.isoformat()
     
@@ -117,13 +127,88 @@ def get_upcoming_events(creds):
         
     return output
 
+def _task_obj(tl, t):
+    return {
+        "id": t.get('id'),
+        "listId": tl['id'],
+        "list": tl.get('title', 'Tasks'),
+        "title": t.get('title', '') or '(no title)',
+        "notes": t.get('notes', ''),
+        "due": t.get('due'),                # RFC3339 date (UTC midnight) or None
+        "completed": t.get('completed'),    # RFC3339 timestamp or None
+        "status": t.get('status', 'needsAction'),
+        "link": t.get('webViewLink', ''),
+    }
+
+def _list_tasks(service, tasklist_id, **kwargs):
+    items, page_token = [], None
+    while True:
+        resp = service.tasks().list(
+            tasklist=tasklist_id, maxResults=100, pageToken=page_token, **kwargs
+        ).execute()
+        items.extend(resp.get('items', []))
+        page_token = resp.get('nextPageToken')
+        if not page_token:
+            break
+    return items
+
+def get_tasks(creds, completed_days=1):
+    """Open tasks from every list, plus tasks completed within the last
+    `completed_days` days (0 = today only, 1 = since yesterday, ...)."""
+    import datetime
+    from googleapiclient.discovery import build
+
+    service = build('tasks', 'v1', credentials=creds)
+
+    now_local = datetime.datetime.now().astimezone()
+    midnight = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    completed_min = (midnight - datetime.timedelta(days=completed_days)).isoformat()
+
+    output = []
+    tasklists = service.tasklists().list(maxResults=100).execute().get('items', [])
+    for tl in tasklists:
+        # Open tasks
+        for t in _list_tasks(service, tl['id'], showCompleted=False, showHidden=False):
+            output.append(_task_obj(tl, t))
+        # Tasks completed today onward (no deep history)
+        for t in _list_tasks(service, tl['id'], showCompleted=True, showHidden=True,
+                             completedMin=completed_min):
+            if t.get('status') == 'completed':
+                output.append(_task_obj(tl, t))
+
+    return output
+
+def set_task_status(creds, tasklist_id, task_id, status):
+    """status is 'completed' or 'needsAction'. Setting needsAction clears the
+    completion timestamp (we send completed=None so Google un-completes it)."""
+    from googleapiclient.discovery import build
+    service = build('tasks', 'v1', credentials=creds)
+    body = {"status": status}
+    if status != "completed":
+        body["completed"] = None
+    service.tasks().patch(tasklist=tasklist_id, task=task_id, body=body).execute()
+    return {"ok": True}
+
 if __name__ == '__main__':
     creds, just_authenticated = authenticate()
-    
+
     if just_authenticated:
-        print("\nSuccessfully authenticated with Google Calendar!")
+        print("\nSuccessfully authenticated with Google!")
         print("You can now safely close this terminal and use the Waylandar widget.")
         sys.exit(0)
-        
+
+    if '--set-status' in sys.argv:
+        i = sys.argv.index('--set-status')
+        tasklist_id, task_id, status = sys.argv[i + 1], sys.argv[i + 2], sys.argv[i + 3]
+        print(json.dumps(set_task_status(creds, tasklist_id, task_id, status)))
+        sys.exit(0)
+
+    if '--tasks' in sys.argv:
+        completed_days = 1
+        if '--completed-days' in sys.argv:
+            completed_days = int(sys.argv[sys.argv.index('--completed-days') + 1])
+        print(json.dumps(get_tasks(creds, completed_days), indent=2))
+        sys.exit(0)
+
     events = get_upcoming_events(creds)
     print(json.dumps(events, indent=2))

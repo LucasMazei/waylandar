@@ -19,7 +19,10 @@ Item {
 
     anchors.fill: parent
 
-    property int expandedIndex: -1
+    property int expandedEventIndex: -1
+    property int expandedPastIndex: -1
+    property int expandedTaskIndex: -1
+    property bool showPastEvents: false
 
     Item {
         id: panelContainer
@@ -36,7 +39,7 @@ Item {
                 spacing: Style.marginS
 
                 NText {
-                    text: "Upcoming Schedule"
+                    text: "Waylandar"
                     font.pixelSize: Style.fontSizeL
                     font.weight: Style.fontWeightBold
                     color: Color.mOnSurface
@@ -60,91 +63,228 @@ Item {
                 }
             }
 
-            NDivider { Layout.fillWidth: true }
-
-            // ---- Agenda list ----
-            Item {
+            // ---- Tabs ----
+            NTabBar {
+                id: tabBar
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                distributeEvenly: true
 
-                // Error state
-                Flickable {
-                    anchors.fill: parent
-                    visible: panelReady && mainInstance.authError.length > 0
-                    contentWidth: width
-                    contentHeight: errorText.implicitHeight
-                    clip: true
-                    NText {
-                        id: errorText
-                        width: parent.width
-                        text: panelReady ? mainInstance.authError : ""
-                        font.pixelSize: Style.fontSizeS
-                        color: Color.mError
-                        wrapMode: Text.WrapAnywhere
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                NTabButton {
+                    text: "Events"
+                    icon: "calendar-month"
+                    tabIndex: 0
+                    checked: tabBar.currentIndex === 0
                 }
-
-                // Empty state
-                NText {
-                    anchors.centerIn: parent
-                    visible: panelReady && mainInstance.authError.length === 0
-                        && mainInstance.calendarEvents.length === 0 && !mainInstance.isSyncing
-                    text: "Your schedule is clear!"
-                    font.pixelSize: Style.fontSizeM
-                    font.italic: true
-                    color: Color.mOnSurfaceVariant
-                }
-
-                // Event list
-                ListView {
-                    id: list
-                    anchors.fill: parent
-                    visible: panelReady && mainInstance.authError.length === 0
-                    model: panelReady ? mainInstance.calendarEvents : []
-                    spacing: Style.marginS
-                    clip: true
-
-                    opacity: (panelReady && mainInstance.isSyncing) ? 0.3 : 1.0
-                    Behavior on opacity { NumberAnimation { duration: 250 } }
-
-                    delegate: Components.EventCard {
-                        width: ListView.view.width
-                        eventData: modelData
-                        pluginCore: root.mainInstance
-                        isExpanded: root.expandedIndex === index
-                        onToggleExpand: root.expandedIndex = (root.expandedIndex === index ? -1 : index)
-                    }
-
-                    section.property: "sectionTitle"
-                    section.criteria: ViewSection.FullString
-                    section.delegate: Item {
-                        width: ListView.view.width
-                        height: 32
-                        NText {
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: Style.marginXS
-                            text: section
-                            font.pixelSize: Style.fontSizeS
-                            font.weight: Style.fontWeightBold
-                            color: Color.mPrimary
-                        }
-                        Rectangle {
-                            anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: 1
-                            color: Color.mOutline
-                        }
-                    }
-                }
-
-                // Loading spinner
-                NBusyIndicator {
-                    anchors.centerIn: parent
-                    running: panelReady && mainInstance.isSyncing
-                    visible: running
+                NTabButton {
+                    text: "Tasks"
+                    icon: "check-circle"
+                    tabIndex: 1
+                    checked: tabBar.currentIndex === 1
                 }
             }
+
+            NDivider { Layout.fillWidth: true }
+
+            // ---- Auth error (shared) ----
+            Flickable {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: panelReady && mainInstance.authError.length > 0
+                contentWidth: width
+                contentHeight: errorText.implicitHeight
+                clip: true
+                NText {
+                    id: errorText
+                    width: parent.width
+                    text: panelReady ? mainInstance.authError : ""
+                    font.pixelSize: Style.fontSizeS
+                    color: Color.mError
+                    wrapMode: Text.WrapAnywhere
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+
+            // ---- Tab content ----
+            StackLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: panelReady && mainInstance.authError.length === 0
+                currentIndex: tabBar.currentIndex
+
+                // --- Events tab ---
+                Item {
+                    NText {
+                        anchors.centerIn: parent
+                        visible: panelReady && mainInstance.upcomingEvents.length === 0
+                            && mainInstance.pastEvents.length === 0 && !mainInstance.isSyncing
+                        text: "Your schedule is clear!"
+                        font.pixelSize: Style.fontSizeM
+                        font.italic: true
+                        color: Color.mOnSurfaceVariant
+                    }
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: Style.marginS
+                        opacity: (panelReady && mainInstance.isSyncing) ? 0.3 : 1.0
+                        Behavior on opacity { NumberAnimation { duration: 250 } }
+
+                        // Collapsible "Earlier" — past / ongoing events, de-emphasised
+                        Rectangle {
+                            Layout.fillWidth: true
+                            visible: panelReady && mainInstance.pastEvents.length > 0
+                            implicitHeight: 30
+                            radius: Style.radiusS
+                            color: earlierMouse.containsMouse ? Color.mSurfaceVariant : Color.mSurface
+                            Behavior on color { ColorAnimation { duration: Style.animationFast } }
+
+                            Row {
+                                anchors.left: parent.left
+                                anchors.leftMargin: Style.marginS
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Style.marginXS
+                                NText {
+                                    text: root.showPastEvents ? "▾" : "▸"
+                                    font.pixelSize: Style.fontSizeS
+                                    color: Color.mOnSurfaceVariant
+                                }
+                                NText {
+                                    text: panelReady ? "Earlier (" + mainInstance.pastEvents.length + ")" : ""
+                                    font.pixelSize: Style.fontSizeS
+                                    font.weight: Style.fontWeightBold
+                                    color: Color.mOnSurfaceVariant
+                                }
+                            }
+                            MouseArea {
+                                id: earlierMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.showPastEvents = !root.showPastEvents
+                            }
+                        }
+
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: visible ? Math.min(contentHeight, 170) : 0
+                            visible: root.showPastEvents && panelReady && mainInstance.pastEvents.length > 0
+                            model: visible ? mainInstance.pastEvents : []
+                            spacing: Style.marginS
+                            clip: true
+                            opacity: 0.55
+
+                            delegate: Components.EventCard {
+                                width: ListView.view.width
+                                eventData: modelData
+                                pluginCore: root.mainInstance
+                                isExpanded: root.expandedPastIndex === index
+                                onToggleExpand: root.expandedPastIndex = (root.expandedPastIndex === index ? -1 : index)
+                            }
+                        }
+
+                        NDivider {
+                            Layout.fillWidth: true
+                            visible: root.showPastEvents && panelReady && mainInstance.pastEvents.length > 0
+                        }
+
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            model: panelReady ? mainInstance.upcomingEvents : []
+                            spacing: Style.marginS
+                            clip: true
+
+                            delegate: Components.EventCard {
+                                width: ListView.view.width
+                                eventData: modelData
+                                pluginCore: root.mainInstance
+                                isExpanded: root.expandedEventIndex === index
+                                onToggleExpand: root.expandedEventIndex = (root.expandedEventIndex === index ? -1 : index)
+                            }
+
+                            section.property: "sectionTitle"
+                            section.criteria: ViewSection.FullString
+                            section.delegate: Item {
+                                width: ListView.view.width
+                                height: 32
+                                NText {
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: Style.marginXS
+                                    text: section
+                                    font.pixelSize: Style.fontSizeS
+                                    font.weight: Style.fontWeightBold
+                                    color: Color.mPrimary
+                                }
+                                Rectangle {
+                                    anchors.bottom: parent.bottom
+                                    width: parent.width
+                                    height: 1
+                                    color: Color.mOutline
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- Tasks tab ---
+                Item {
+                    NText {
+                        anchors.centerIn: parent
+                        visible: panelReady && mainInstance.tasks.length === 0 && !mainInstance.isSyncing
+                        text: "No open tasks. Nice."
+                        font.pixelSize: Style.fontSizeM
+                        font.italic: true
+                        color: Color.mOnSurfaceVariant
+                    }
+
+                    ListView {
+                        anchors.fill: parent
+                        model: panelReady ? mainInstance.tasks : []
+                        spacing: Style.marginS
+                        clip: true
+                        opacity: (panelReady && mainInstance.isSyncing) ? 0.3 : 1.0
+                        Behavior on opacity { NumberAnimation { duration: 250 } }
+
+                        delegate: Components.TaskCard {
+                            width: ListView.view.width
+                            taskData: modelData
+                            pluginCore: root.mainInstance
+                            isExpanded: root.expandedTaskIndex === index
+                            onToggleExpand: root.expandedTaskIndex = (root.expandedTaskIndex === index ? -1 : index)
+                        }
+
+                        section.property: "sectionTitle"
+                        section.criteria: ViewSection.FullString
+                        section.delegate: Item {
+                            width: ListView.view.width
+                            height: 32
+                            NText {
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: Style.marginXS
+                                text: section
+                                font.pixelSize: Style.fontSizeS
+                                font.weight: Style.fontWeightBold
+                                color: section === "Overdue" ? Color.mError
+                                    : section === "Completed" ? Color.mOnSurfaceVariant
+                                    : Color.mPrimary
+                            }
+                            Rectangle {
+                                anchors.bottom: parent.bottom
+                                width: parent.width
+                                height: 1
+                                color: Color.mOutline
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        NBusyIndicator {
+            anchors.centerIn: parent
+            running: panelReady && mainInstance.isSyncing
+                && mainInstance.calendarEvents.length === 0 && mainInstance.tasks.length === 0
+            visible: running
         }
     }
 }

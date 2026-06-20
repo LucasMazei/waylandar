@@ -11,7 +11,10 @@ Item {
     property var pluginApi: null
 
     // ---- Public state (read by Panel / BarWidget) ----
-    property var calendarEvents: []        // upcoming events, with .sectionTitle and .notified_for
+    property var calendarEvents: []        // all events (for BarWidget / reminders)
+    property var upcomingEvents: []        // today + future, with .sectionTitle
+    property var pastEvents: []            // within days-back window, de-emphasised
+    property var tasks: []                 // open Google Tasks, soonest-due first
     property bool isSyncing: false
     property string authError: ""
     property int minutesUntilSync: syncIntervalMinutes
@@ -21,8 +24,11 @@ Item {
     property int syncIntervalMinutes: pluginApi?.pluginSettings?.syncIntervalMinutes ?? 60
     property bool use12hourFormat: pluginApi?.pluginSettings?.use12hourFormat ?? false
     property bool notifyReminders: pluginApi?.pluginSettings?.notifyReminders ?? true
+    property int completedTaskDays: pluginApi?.pluginSettings?.completedTaskDays ?? 1
+    property int eventDaysBack: pluginApi?.pluginSettings?.eventDaysBack ?? 1
 
     signal eventsUpdated()
+    signal tasksUpdated()
 
     onPluginApiChanged: {
         if (pluginApi) {
@@ -38,13 +44,13 @@ Item {
             pluginApi.pluginSettings = {
                 syncIntervalMinutes: 60,
                 use12hourFormat: false,
-                notifyReminders: true
+                notifyReminders: true,
+                completedTaskDays: 1,
+                eventDaysBack: 1
             }
             pluginApi.saveSettings()
         }
-        syncIntervalMinutes = pluginApi.pluginSettings.syncIntervalMinutes ?? 60
-        use12hourFormat = pluginApi.pluginSettings.use12hourFormat ?? false
-        notifyReminders = pluginApi.pluginSettings.notifyReminders ?? true
+        reloadSettings()
         minutesUntilSync = syncIntervalMinutes
     }
 
@@ -54,6 +60,12 @@ Item {
         syncIntervalMinutes = pluginApi.pluginSettings.syncIntervalMinutes ?? 60
         use12hourFormat = pluginApi.pluginSettings.use12hourFormat ?? false
         notifyReminders = pluginApi.pluginSettings.notifyReminders ?? true
+        var prevCompleted = completedTaskDays
+        var prevBack = eventDaysBack
+        completedTaskDays = pluginApi.pluginSettings.completedTaskDays ?? 1
+        eventDaysBack = pluginApi.pluginSettings.eventDaysBack ?? 1
+        if (completedTaskDays !== prevCompleted || eventDaysBack !== prevBack)
+            Qt.callLater(sync)   // re-fetch with the new windows
     }
 
     function sync() {
@@ -61,12 +73,14 @@ Item {
         minutesUntilSync = syncIntervalMinutes
         isSyncing = true
         fetchProcess.running = true
+        if (!tasksProcess.running)
+            tasksProcess.running = true
     }
 
     // ---- Backend fetch (Google Calendar via the waylandar-auth wrapper) ----
     Process {
         id: fetchProcess
-        command: ["waylandar-auth", "--background"]
+        command: ["waylandar-auth", "--days-back", String(eventDaysBack), "--background"]
         running: false
 
         stdout: StdioCollector {
@@ -79,6 +93,8 @@ Item {
                     if (parsed.error) {
                         authError = parsed.error
                         calendarEvents = []
+                        upcomingEvents = []
+                        pastEvents = []
                         root.eventsUpdated()
                         return
                     }
@@ -86,31 +102,22 @@ Item {
                     authError = ""
                     lastSync = new Date()
 
-                    var now = new Date()
-                    var todayStr = now.toDateString()
-                    var tomorrow = new Date(now)
-                    tomorrow.setDate(tomorrow.getDate() + 1)
-                    var tomorrowStr = tomorrow.toDateString()
-
-                    var filtered = []
+                    var today = new Date(); today.setHours(0, 0, 0, 0)
+                    var past = [], upcoming = []
                     for (var i = 0; i < parsed.length; i++) {
-                        var d = new Date(parsed[i].start)
-                        // Backend returns the whole month; the agenda only shows upcoming.
-                        if (d < now && parsed[i].end && new Date(parsed[i].end) < now)
-                            continue
-
-                        var dStr = d.toDateString()
-                        if (dStr === todayStr)
-                            parsed[i].sectionTitle = "Today"
-                        else if (dStr === tomorrowStr)
-                            parsed[i].sectionTitle = "Tomorrow"
-                        else
-                            parsed[i].sectionTitle = d.toLocaleDateString(Qt.locale(), "dddd, MMM d")
-
-                        parsed[i].notified_for = []
-                        filtered.push(parsed[i])
+                        var ev = parsed[i]
+                        var sd = eventStartDate(ev.start)
+                        var diff = Math.round((sd.getTime() - today.getTime()) / 86400000)
+                        ev.isPast = diff < 0
+                        if (diff === 0) ev.sectionTitle = "Today"
+                        else if (diff === 1) ev.sectionTitle = "Tomorrow"
+                        else ev.sectionTitle = Qt.locale().toString(sd, "dddd, MMM d")
+                        ev.notified_for = []
+                        ;(ev.isPast ? past : upcoming).push(ev)
                     }
-                    calendarEvents = filtered
+                    calendarEvents = upcoming.concat(past)  // for BarWidget / reminders
+                    upcomingEvents = upcoming
+                    pastEvents = past
                     root.eventsUpdated()
                 } catch (e) {
                     Logger.e("Waylandar", "Failed to parse backend output: " + e)
@@ -123,6 +130,40 @@ Item {
             onStreamFinished: {
                 if (text && text.trim().length > 0)
                     Logger.w("Waylandar", "backend stderr: " + text.trim())
+            }
+        }
+    }
+
+    // ---- Backend fetch (Google Tasks) ----
+    Process {
+        id: tasksProcess
+        command: ["waylandar-auth", "--tasks", "--completed-days", String(completedTaskDays), "--background"]
+        running: false
+
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                try {
+                    var parsed = JSON.parse(text)
+                    if (parsed.error) {
+                        // Auth/scope problem is already surfaced by the calendar fetch.
+                        tasks = []
+                        root.tasksUpdated()
+                        return
+                    }
+                    tasks = processTasks(parsed)
+                    root.tasksUpdated()
+                } catch (e) {
+                    Logger.e("Waylandar", "Failed to parse tasks output: " + e)
+                }
+            }
+        }
+
+        stderr: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                if (text && text.trim().length > 0)
+                    Logger.w("Waylandar", "tasks stderr: " + text.trim())
             }
         }
     }
@@ -179,6 +220,140 @@ Item {
         return use12hourFormat
             ? Qt.locale().toString(date, "h:mm AP")
             : Qt.locale().toString(date, "HH:mm")
+    }
+
+    // Event start → local midnight Date. All-day events arrive as "YYYY-MM-DD"
+    // (no tz); parse the date parts directly to avoid a UTC->local day shift.
+    function eventStartDate(s) {
+        if (typeof s === "string" && s.length === 10) {
+            var p = s.split("-")
+            return new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]))
+        }
+        var d = new Date(s)
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    }
+
+    // Google Tasks "due" is a date-only value pinned to UTC midnight; parsing it
+    // with `new Date()` shifts it a day in negative-offset zones (BRT). Parse the
+    // date portion as a LOCAL date instead.
+    function dueLocalDate(due) {
+        if (!due) return null
+        var p = ("" + due).substring(0, 10).split("-")
+        if (p.length < 3) return null
+        var d = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]))
+        return isNaN(d.getTime()) ? null : d
+    }
+
+    function dueIsOverdue(due) {
+        var d = dueLocalDate(due)
+        if (!d) return false
+        var today = new Date(); today.setHours(0, 0, 0, 0)
+        return d.getTime() < today.getTime()
+    }
+
+    function formatDue(due) {
+        var d = dueLocalDate(due)
+        if (!d) return ""
+        var today = new Date(); today.setHours(0, 0, 0, 0)
+        var diff = Math.round((d.getTime() - today.getTime()) / 86400000)
+        if (diff < 0) return "Overdue · " + Qt.locale().toString(d, "MMM d")
+        if (diff === 0) return "Today"
+        if (diff === 1) return "Tomorrow"
+        return Qt.locale().toString(d, "ddd, MMM d")
+    }
+
+    // Completion timestamp (RFC3339, has tz) → local midnight Date.
+    function completedLocalDate(c) {
+        if (!c) return null
+        var d = new Date(c)
+        if (isNaN(d.getTime())) return null
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    }
+
+    function formatCompleted(c) {
+        if (!c) return ""
+        var d = new Date(c)
+        if (isNaN(d.getTime())) return ""
+        return Qt.locale().toString(d, "MMM d") + " " + formatTime(d)
+    }
+
+    function _dayDiff(d) {
+        var today = new Date(); today.setHours(0, 0, 0, 0)
+        return Math.round((d.getTime() - today.getTime()) / 86400000)
+    }
+
+    // The day a task belongs to: completion date if done, else due date.
+    function _refDate(t) {
+        return t.status === "completed" ? completedLocalDate(t.completed) : dueLocalDate(t.due)
+    }
+
+    // ---- Task grouping (mirrors the agenda's day sections) ----
+    function taskSection(t) {
+        var d = _refDate(t)
+        if (!d) return "No date"
+        var diff = _dayDiff(d)
+        if (t.status === "completed") {
+            // Completed items are grouped by completion day, never as "Overdue".
+            if (diff === 0) return "Today"
+            if (diff === -1) return "Yesterday"
+            return Qt.locale().toString(d, "dddd, MMM d")
+        }
+        if (diff < 0) return "Overdue"
+        if (diff === 0) return "Today"
+        if (diff === 1) return "Tomorrow"
+        return Qt.locale().toString(d, "dddd, MMM d")
+    }
+
+    // Sort by reference day (asc, undated last); open before completed within a day.
+    function processTasks(arr) {
+        var copy = (arr || []).slice()
+        copy.sort(function (a, b) {
+            var ra = _refDate(a), rb = _refDate(b)
+            if (!ra && rb) return 1
+            if (ra && !rb) return -1
+            if (ra && rb && ra.getTime() !== rb.getTime())
+                return ra.getTime() - rb.getTime()
+            var ac = a.status === "completed", bc = b.status === "completed"
+            if (ac !== bc) return ac ? 1 : -1
+            return 0
+        })
+        for (var i = 0; i < copy.length; i++)
+            copy[i].sectionTitle = taskSection(copy[i])
+        return copy
+    }
+
+    // ---- Toggle a task's completion (write-back, both directions) ----
+    function setTaskStatus(listId, taskId, status) {
+        if (!listId || !taskId || statusProcess.running) return
+        var copy = tasks.slice()
+        for (var i = 0; i < copy.length; i++) {
+            if (copy[i].id === taskId) {
+                copy[i].status = status
+                copy[i].completed = (status === "completed") ? new Date().toISOString() : null
+                break
+            }
+        }
+        tasks = processTasks(copy)   // optimistic regroup
+        tasksUpdated()
+        statusProcess.command = ["waylandar-auth", "--set-status", listId, taskId, status]
+        statusProcess.running = true
+    }
+
+    function toggleTask(listId, taskId, currentStatus) {
+        setTaskStatus(listId, taskId, currentStatus === "completed" ? "needsAction" : "completed")
+    }
+
+    Process {
+        id: statusProcess
+        running: false
+        onExited: (code, status) => Qt.callLater(root.sync)
+        stderr: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                if (text && text.trim().length > 0)
+                    Logger.w("Waylandar", "set-status stderr: " + text.trim())
+            }
+        }
     }
 
     function nextEvent() {

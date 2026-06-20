@@ -1,5 +1,7 @@
 {
-  "syncIntervalMinutes": 60,
+  "syncIntervalMinutes": 15,
   "use12hourFormat": false,
-  "notifyReminders": true
+  "notifyReminders": true,
+  "completedTaskDays": 1,
+  "eventDaysBack": 1
 }

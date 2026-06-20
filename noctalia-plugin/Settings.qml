@@ -11,6 +11,8 @@ ColumnLayout {
     property int syncIntervalMinutes: 60
     property bool use12hourFormat: false
     property bool notifyReminders: true
+    property int completedTaskDays: 1
+    property int eventDaysBack: 1
 
     spacing: Style.marginL
 
@@ -19,6 +21,8 @@ ColumnLayout {
             syncIntervalMinutes = pluginApi.pluginSettings.syncIntervalMinutes ?? 60
             use12hourFormat = pluginApi.pluginSettings.use12hourFormat ?? false
             notifyReminders = pluginApi.pluginSettings.notifyReminders ?? true
+            completedTaskDays = pluginApi.pluginSettings.completedTaskDays ?? 1
+            eventDaysBack = pluginApi.pluginSettings.eventDaysBack ?? 1
         }
     }
 
@@ -56,6 +60,28 @@ ColumnLayout {
         onSelected: key => root.syncIntervalMinutes = parseInt(key)
     }
 
+    NSpinBox {
+        Layout.fillWidth: true
+        label: "Completed tasks shown (days)"
+        description: "How many days back of completed tasks to show. 0 = today only, 1 = since yesterday."
+        from: 0
+        to: 30
+        stepSize: 1
+        value: root.completedTaskDays
+        onValueChanged: if (value !== root.completedTaskDays) root.completedTaskDays = value
+    }
+
+    NSpinBox {
+        Layout.fillWidth: true
+        label: "Past events shown (days)"
+        description: "How many days back of events to keep in the collapsible \"Earlier\" section. 0 = today only, 1 = since yesterday."
+        from: 0
+        to: 30
+        stepSize: 1
+        value: root.eventDaysBack
+        onValueChanged: if (value !== root.eventDaysBack) root.eventDaysBack = value
+    }
+
     function saveSettings() {
         if (!pluginApi) {
             Logger.e("Waylandar", "Cannot save settings: pluginApi is null")
@@ -66,6 +92,8 @@ ColumnLayout {
         pluginApi.pluginSettings.syncIntervalMinutes = syncIntervalMinutes
         pluginApi.pluginSettings.use12hourFormat = use12hourFormat
         pluginApi.pluginSettings.notifyReminders = notifyReminders
+        pluginApi.pluginSettings.completedTaskDays = completedTaskDays
+        pluginApi.pluginSettings.eventDaysBack = eventDaysBack
         pluginApi.saveSettings()
 
         if (pluginApi.mainInstance && pluginApi.mainInstance.reloadSettings)
