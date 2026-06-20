@@ -1,0 +1,32 @@
+{
+  "id": "waylandar",
+  "name": "Waylandar",
+  "version": "0.1.0",
+  "minNoctaliaVersion": "4.0.0",
+  "author": "LucasMazei",
+  "license": "MIT",
+  "repository": "https://github.com/LucasMazei/waylandar",
+  "description": "Google Calendar agenda in your bar, powered by Waylandar's OAuth backend.",
+  "tags": [
+    "Bar",
+    "Panel",
+    "Productivity",
+    "Calendar"
+  ],
+  "entryPoints": {
+    "main": "Main.qml",
+    "barWidget": "BarWidget.qml",
+    "panel": "Panel.qml",
+    "settings": "Settings.qml"
+  },
+  "dependencies": {
+    "plugins": []
+  },
+  "metadata": {
+    "defaultSettings": {
+      "syncIntervalMinutes": 60,
+      "use12hourFormat": false,
+      "notifyReminders": true
+    }
+  }
+}

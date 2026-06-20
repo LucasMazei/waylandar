@@ -1,0 +1,5 @@
+{
+  "syncIntervalMinutes": 60,
+  "use12hourFormat": false,
+  "notifyReminders": true
+}
