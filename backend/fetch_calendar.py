@@ -100,12 +100,12 @@ def get_upcoming_events(creds):
     ).execute()
     
     events = events_result.get('items', [])
-    
+
     output = []
     for event in events:
         start = event['start'].get('dateTime', event['start'].get('date'))
         end = event['end'].get('dateTime', event['end'].get('date'))
-        
+
         # Extract the user's custom reminders!
         reminders_list = []
         reminders = event.get('reminders', {})
@@ -115,17 +115,39 @@ def get_upcoming_events(creds):
             for override in reminders.get('overrides', []):
                 if override.get('method') == 'popup':
                     reminders_list.append(override.get('minutes', 10))
-        
+
         output.append({
+            "id": event.get('id', ''),
             "title": event.get('summary', 'Busy'),
             "description": event.get('description', ''), # ADDED FULL DESCRIPTION!
             "start": start,
             "end": end,
             "link": event.get('htmlLink', ''),
+            "meetLink": _meet_link(event),
+            "rsvp": _rsvp_status(event),
             "reminders": reminders_list
         })
-        
+
     return output
+
+def _meet_link(event):
+    """Video conferencing URL, if any: Google Meet entry point or hangoutLink."""
+    conf = event.get('conferenceData', {})
+    for ep in conf.get('entryPoints', []):
+        if ep.get('entryPointType') == 'video' and ep.get('uri'):
+            return ep['uri']
+    return event.get('hangoutLink', '')
+
+def _rsvp_status(event):
+    """This user's RSVP: accepted / declined / tentative / needsAction.
+    Events with no attendees are the user's own → treated as accepted."""
+    attendees = event.get('attendees')
+    if not attendees:
+        return 'accepted'
+    for a in attendees:
+        if a.get('self'):
+            return a.get('responseStatus', 'needsAction')
+    return 'needsAction'
 
 def _task_obj(tl, t):
     return {

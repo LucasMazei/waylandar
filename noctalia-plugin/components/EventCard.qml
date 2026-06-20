@@ -9,6 +9,8 @@ Rectangle {
     property bool isExpanded: false
     signal toggleExpand()
 
+    readonly property bool hasMeet: eventData && eventData.meetLink && eventData.meetLink.length > 0
+
     height: isExpanded ? Math.max(110, 80 + expandedDetails.height) : 55
     Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.OutQuart } }
 
@@ -44,7 +46,7 @@ Rectangle {
 
         Column {
             spacing: Style.marginXXS
-            width: parent.width - 45
+            width: parent.width - 45 - (card.hasMeet ? 66 : 0)
             anchors.verticalCenter: parent.verticalCenter
 
             Text {
@@ -66,6 +68,39 @@ Rectangle {
                 }
                 font.pixelSize: Style.fontSizeS
                 color: Color.mOnSurfaceVariant
+            }
+        }
+    }
+
+    // Join the meeting (visible only when the event has a video link)
+    Rectangle {
+        id: joinButton
+        visible: card.hasMeet
+        width: 56
+        height: 28
+        radius: Style.radiusS
+        anchors.right: parent.right
+        anchors.rightMargin: Style.marginM
+        y: 13   // vertically centered in the 55px top row
+        color: joinMouseArea.containsMouse ? Color.mSecondary : Color.mPrimary
+        Behavior on color { ColorAnimation { duration: Style.animationFast } }
+
+        Text {
+            anchors.centerIn: parent
+            text: "Join"
+            font.pixelSize: Style.fontSizeS
+            font.weight: Style.fontWeightBold
+            color: Color.mOnPrimary
+        }
+
+        MouseArea {
+            id: joinMouseArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if (card.hasMeet)
+                    Qt.openUrlExternally(card.eventData.meetLink)
             }
         }
     }

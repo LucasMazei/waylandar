@@ -13,6 +13,7 @@ ColumnLayout {
     property bool notifyReminders: true
     property int completedTaskDays: 1
     property int eventDaysBack: 1
+    property bool autoJoinAcceptedCalls: false
 
     spacing: Style.marginL
 
@@ -23,6 +24,7 @@ ColumnLayout {
             notifyReminders = pluginApi.pluginSettings.notifyReminders ?? true
             completedTaskDays = pluginApi.pluginSettings.completedTaskDays ?? 1
             eventDaysBack = pluginApi.pluginSettings.eventDaysBack ?? 1
+            autoJoinAcceptedCalls = pluginApi.pluginSettings.autoJoinAcceptedCalls ?? false
         }
     }
 
@@ -38,6 +40,13 @@ ColumnLayout {
         description: "Fire notify-send alerts based on each event's Google Calendar reminders."
         checked: root.notifyReminders
         onToggled: checked => root.notifyReminders = checked
+    }
+
+    NToggle {
+        label: "Auto-open accepted calls"
+        description: "Open the meeting in your browser ~1 min before it starts — only for events you RSVP'd yes to (declined / no-response are ignored)."
+        checked: root.autoJoinAcceptedCalls
+        onToggled: checked => root.autoJoinAcceptedCalls = checked
     }
 
     NDivider {
@@ -94,6 +103,7 @@ ColumnLayout {
         pluginApi.pluginSettings.notifyReminders = notifyReminders
         pluginApi.pluginSettings.completedTaskDays = completedTaskDays
         pluginApi.pluginSettings.eventDaysBack = eventDaysBack
+        pluginApi.pluginSettings.autoJoinAcceptedCalls = autoJoinAcceptedCalls
         pluginApi.saveSettings()
 
         if (pluginApi.mainInstance && pluginApi.mainInstance.reloadSettings)

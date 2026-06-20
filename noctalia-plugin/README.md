@@ -3,9 +3,11 @@
 A Google Calendar agenda for the [Noctalia](https://github.com/noctalia-dev/noctalia-shell) bar,
 wrapping [Waylandar](https://github.com/samjoshuadud/waylandar)'s Python OAuth backend.
 
-- **Bar pill** — shows your next event in the tooltip; click to open the agenda panel.
-- **Panel** — upcoming schedule grouped by day (Today / Tomorrow / weekday), expandable cards with description + "Open in Browser".
-- **Reminders** — fires `notify-send` alerts based on each event's Google Calendar reminder offsets.
+- **Bar pill** — shows your next event in the tooltip; click to open the panel.
+- **Events tab** — upcoming schedule grouped by day (Today / Tomorrow / weekday); past & ongoing events tucked into a collapsible "Earlier" section. Expandable cards with description + "Open in Browser", plus a **Join** button for events with a Google Meet link.
+- **Tasks tab** — open Google Tasks grouped by due day; tick the circle to complete or un-complete; completed items shown with their completion time (configurable days back).
+- **Reminders** — `notify-send` alerts based on each event's Google Calendar reminder offsets.
+- **Auto-join** — optionally open accepted calls in the browser ~1 min before they start (RSVP'd-yes only).
 - Themes automatically with Noctalia (uses `Color`/`Style` tokens).
 
 ## How it works
@@ -39,8 +41,12 @@ bind = $mainMod, K, exec, qs -c noctalia-shell ipc call plugin:waylandar toggle
 
 - **12-hour clock** — `1:30 PM` vs `13:30`.
 - **Reminder notifications** — toggle the `notify-send` alerts.
+- **Auto-open accepted calls** — open RSVP'd-yes meetings ~1 min before start.
 - **Sync interval** — background poll cadence (15m / 30m / 1h / 2h).
+- **Completed tasks shown (days)** — how far back to show completed tasks (default 1).
+- **Past events shown (days)** — days of past/ongoing events in the "Earlier" section (default 1).
 
 ## Status
 
-v0.1 — agenda panel + bar pill. Full-month dashboard (upstream's second mode) not yet ported.
+v0.5 — events + tasks tabs, join links, auto-join, configurable windows.
+Full-month dashboard (upstream's second mode) not yet ported (see `TODO.md`).

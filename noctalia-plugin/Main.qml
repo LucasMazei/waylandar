@@ -26,6 +26,11 @@ Item {
     property bool notifyReminders: pluginApi?.pluginSettings?.notifyReminders ?? true
     property int completedTaskDays: pluginApi?.pluginSettings?.completedTaskDays ?? 1
     property int eventDaysBack: pluginApi?.pluginSettings?.eventDaysBack ?? 1
+    property bool autoJoinAcceptedCalls: pluginApi?.pluginSettings?.autoJoinAcceptedCalls ?? false
+
+    // Meet links already auto-opened this session (key = event id+start), so the
+    // 1-minute ticker fires each call exactly once.
+    property var openedCalls: ({})
 
     signal eventsUpdated()
     signal tasksUpdated()
@@ -46,7 +51,8 @@ Item {
                 use12hourFormat: false,
                 notifyReminders: true,
                 completedTaskDays: 1,
-                eventDaysBack: 1
+                eventDaysBack: 1,
+                autoJoinAcceptedCalls: false
             }
             pluginApi.saveSettings()
         }
@@ -60,6 +66,7 @@ Item {
         syncIntervalMinutes = pluginApi.pluginSettings.syncIntervalMinutes ?? 60
         use12hourFormat = pluginApi.pluginSettings.use12hourFormat ?? false
         notifyReminders = pluginApi.pluginSettings.notifyReminders ?? true
+        autoJoinAcceptedCalls = pluginApi.pluginSettings.autoJoinAcceptedCalls ?? false
         var prevCompleted = completedTaskDays
         var prevBack = eventDaysBack
         completedTaskDays = pluginApi.pluginSettings.completedTaskDays ?? 1
@@ -194,6 +201,25 @@ Item {
                         var timeStr = formatTime(new Date(ev.start))
                         notifyProcess.send("󰃭 " + ev.title, "Starts in " + diffMins + " min at " + timeStr)
                         ev.notified_for.push(diffMins)
+                    }
+                }
+            }
+
+            // Auto-open accepted calls ~1 min before they start (RSVP'd yes only).
+            if (autoJoinAcceptedCalls) {
+                var nowJ = new Date()
+                for (var j = 0; j < upcomingEvents.length; j++) {
+                    var e2 = upcomingEvents[j]
+                    if (!e2.meetLink || e2.meetLink.length === 0) continue
+                    if (e2.rsvp !== "accepted") continue
+                    if (typeof e2.start === "string" && e2.start.length === 10) continue // all-day
+                    var key = (e2.id || "") + "@" + e2.start
+                    if (openedCalls[key]) continue
+                    var dm = Math.floor((new Date(e2.start).getTime() - nowJ.getTime()) / 60000)
+                    if (dm <= 1 && dm >= -1) {
+                        Qt.openUrlExternally(e2.meetLink)
+                        openedCalls[key] = true
+                        notifyProcess.send("󰸋 " + e2.title, "Opening the call…")
                     }
                 }
             }
