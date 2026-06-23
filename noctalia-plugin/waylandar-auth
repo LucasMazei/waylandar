@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Wrapper for the waylandar noctalia plugin: runs the Python backend via uv.
+# Mirrors the upstream `waylandar-auth` binary (Nix/Arch) which we don't install.
+# Usage: waylandar-auth [--background] [YEAR MONTH]
+set -euo pipefail
+# Noctalia/Hypr may launch quickshell with a minimal PATH that lacks ~/.local/bin,
+# where uv lives. Ensure it's findable regardless of the caller's PATH.
+export PATH="$HOME/.local/bin:$PATH"
+BACKEND="$HOME/Documentos/Programming/waylandar/backend"
+cd "$BACKEND"
+exec uv run python fetch_calendar.py "$@"

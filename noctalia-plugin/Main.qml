@@ -10,6 +10,10 @@ Item {
 
     property var pluginApi: null
 
+    // Absolute path to the backend wrapper — quickshell may be launched (by Hypr)
+    // with a minimal PATH that lacks ~/.local/bin, so we can't rely on bare lookup.
+    readonly property string authCmd: (Quickshell.env("HOME") || "/home/Usuario") + "/.local/bin/waylandar-auth"
+
     // ---- Public state (read by Panel / BarWidget) ----
     property var calendarEvents: []        // all events (for BarWidget / reminders)
     property var upcomingEvents: []        // today + future, with .sectionTitle
@@ -87,7 +91,7 @@ Item {
     // ---- Backend fetch (Google Calendar via the waylandar-auth wrapper) ----
     Process {
         id: fetchProcess
-        command: ["waylandar-auth", "--days-back", String(eventDaysBack), "--background"]
+        command: [authCmd, "--days-back", String(eventDaysBack), "--background"]
         running: false
 
         stdout: StdioCollector {
@@ -144,7 +148,7 @@ Item {
     // ---- Backend fetch (Google Tasks) ----
     Process {
         id: tasksProcess
-        command: ["waylandar-auth", "--tasks", "--completed-days", String(completedTaskDays), "--background"]
+        command: [authCmd, "--tasks", "--completed-days", String(completedTaskDays), "--background"]
         running: false
 
         stdout: StdioCollector {
@@ -362,7 +366,7 @@ Item {
         }
         tasks = processTasks(copy)   // optimistic regroup
         tasksUpdated()
-        statusProcess.command = ["waylandar-auth", "--set-status", listId, taskId, status]
+        statusProcess.command = [authCmd, "--set-status", listId, taskId, status]
         statusProcess.running = true
     }
 

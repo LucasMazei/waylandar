@@ -12,14 +12,20 @@ wrapping [Waylandar](https://github.com/samjoshuadud/waylandar)'s Python OAuth b
 
 ## How it works
 
-The plugin shells out to `waylandar-auth` (a wrapper at `~/.local/bin/waylandar-auth`)
-which runs `backend/fetch_calendar.py` via `uv`. That script talks to the Google
-Calendar API and prints JSON, which `Main.qml` parses into the agenda.
+The plugin shells out to `waylandar-auth` (a wrapper at `~/.local/bin/waylandar-auth`,
+copy in this dir) which runs `backend/fetch_calendar.py` via `uv`. That script talks to
+the Google Calendar/Tasks API and prints JSON, which `Main.qml` parses.
+
+`Main.qml` invokes the wrapper by **absolute path** (`$HOME/.local/bin/waylandar-auth`)
+and the wrapper **prepends `~/.local/bin` to its own `PATH`** — because Hypr can launch
+quickshell with a minimal `PATH` that lacks `~/.local/bin` (where `uv` lives). Without
+both, the plugin fails silently with an empty panel.
 
 ## Setup
 
 1. **Dependencies:** `quickshell`, `uv`, `notify-send` (libnotify).
-2. **Wrapper:** ensure `~/.local/bin/waylandar-auth` exists and points at this repo's `backend/`.
+2. **Wrapper:** copy `waylandar-auth` (in this dir) to `~/.local/bin/waylandar-auth`,
+   `chmod +x` it. It self-heals `PATH` and points at this repo's `backend/`.
 3. **Google OAuth credentials** (one-time):
    - [Google Cloud Console](https://console.cloud.google.com/) → new project → enable **Google Calendar API**.
    - **Credentials** → create **OAuth 2.0 Client ID** (type: Desktop app) → download JSON.
