@@ -407,14 +407,28 @@ Item {
     // ---- Habits: local date key + read/write helpers ----
     function _pad(n) { return (n < 10 ? "0" : "") + n }
     function dateKey(d) { return d.getFullYear() + "-" + _pad(d.getMonth() + 1) + "-" + _pad(d.getDate()) }
+    function keyToDate(key) {
+        var p = ("" + key).split("-")
+        if (p.length < 3) return new Date(NaN)
+        var d = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2])); d.setHours(0, 0, 0, 0)
+        return d
+    }
     function _todayKey() { return dateKey(new Date()) }
 
-    function isHabitDone(id) { return todayDone.indexOf(id) !== -1 }
+    // ---- Read helpers (any day) ----
+    function doneOn(id, key) { return (habitLog[key] || []).indexOf(id) !== -1 }
+    function doneCountOn(key) {
+        var arr = habitLog[key] || [], n = 0
+        for (var i = 0; i < habitDefs.length; i++)
+            if (arr.indexOf(habitDefs[i].id) !== -1) n++
+        return n
+    }
+    function isHabitDone(id) { return doneOn(id, todayKey) }   // today convenience
 
-    // Toggle today's completion for a habit and persist. Reassign the whole log
+    // Toggle a habit's completion on a given day and persist. Reassign the whole log
     // object (JsonAdapter only notifies on property assignment, not in-place mutation).
-    function toggleHabit(id) {
-        var key = (todayKey && todayKey.length) ? todayKey : _todayKey()
+    function toggleHabitOn(id, key) {
+        if (!key || !key.length) key = _todayKey()
         var log = {}
         for (var k in habitLog) log[k] = (habitLog[k] || []).slice()
         var arr = log[key] || []
@@ -425,13 +439,15 @@ Item {
         habitsFile.writeAdapter()
         habitsUpdated()
     }
+    function toggleHabit(id) { toggleHabitOn(id, todayKey) }   // today convenience
 
-    // Consecutive-day streak ending today. If today isn't done yet, count back
-    // from yesterday so an unfinished today doesn't read as a broken streak.
-    function habitStreak(id) {
+    // Consecutive-day streak ending on `key`. If that day isn't done yet, count back
+    // from the day before so an unfinished current day doesn't read as a broken streak.
+    function habitStreakOn(id, key) {
+        var d = keyToDate(key)
+        if (isNaN(d.getTime())) return 0
+        if ((habitLog[key] || []).indexOf(id) === -1) d.setDate(d.getDate() - 1)
         var streak = 0
-        var d = new Date(); d.setHours(0, 0, 0, 0)
-        if (todayDone.indexOf(id) === -1) d.setDate(d.getDate() - 1)
         while (true) {
             var arr = habitLog[dateKey(d)] || []
             if (arr.indexOf(id) !== -1) { streak++; d.setDate(d.getDate() - 1) }
@@ -439,6 +455,7 @@ Item {
         }
         return streak
     }
+    function habitStreak(id) { return habitStreakOn(id, todayKey) }   // today convenience
 
     // ---- Habits persistence (vault JSON via Quickshell.Io) ----
     FileView {

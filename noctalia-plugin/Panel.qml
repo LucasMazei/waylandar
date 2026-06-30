@@ -28,6 +28,18 @@ Item {
     property string eventQuery: ""
     property string taskQuery: ""
 
+    // ---- Habits: which day is being viewed/marked ----
+    property var selectedDate: { var d = new Date(); d.setHours(0, 0, 0, 0); return d }
+    readonly property string selectedKey: panelReady ? mainInstance.dateKey(selectedDate) : ""
+    readonly property bool isToday: panelReady && selectedKey === mainInstance.todayKey
+
+    function shiftDay(delta) {
+        var d = new Date(selectedDate); d.setDate(d.getDate() + delta); d.setHours(0, 0, 0, 0)
+        var today = new Date(); today.setHours(0, 0, 0, 0)
+        if (d.getTime() > today.getTime()) return   // no marking the future
+        selectedDate = d
+    }
+
     function _matches(haystack, q) {
         if (!q || q.length === 0) return true
         if (!haystack) return false
@@ -381,13 +393,60 @@ Item {
                 ColumnLayout {
                     spacing: Style.marginS
 
-                    NText {
+                    // Day navigator: ◀  [progress ring + date]  ▶
+                    RowLayout {
                         Layout.fillWidth: true
-                        text: panelReady ? Qt.locale().toString(new Date(), "dddd, MMM d") : ""
-                        font.pixelSize: Style.fontSizeS
-                        font.weight: Style.fontWeightBold
-                        color: Color.mPrimary
+                        Layout.topMargin: Style.marginXS
+                        spacing: Style.marginS
+
+                        NIconButton {
+                            icon: "chevron-left"
+                            tooltipText: "Previous day"
+                            onClicked: root.shiftDay(-1)
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Components.HabitProgressRing {
+                            Layout.alignment: Qt.AlignVCenter
+                            ratio: (panelReady && mainInstance.habitDefs.length > 0)
+                                ? mainInstance.doneCountOn(root.selectedKey) / mainInstance.habitDefs.length
+                                : 0
+                        }
+
+                        ColumnLayout {
+                            spacing: 0
+                            Layout.alignment: Qt.AlignVCenter
+
+                            NText {
+                                text: panelReady ? Qt.locale().toString(root.selectedDate, "dddd") : ""
+                                font.pixelSize: Style.fontSizeM
+                                font.weight: Style.fontWeightBold
+                                color: Color.mOnSurface
+                            }
+                            NText {
+                                text: {
+                                    if (!panelReady) return ""
+                                    return root.isToday ? "Today · " + Qt.locale().toString(root.selectedDate, "MMM d")
+                                        : Qt.locale().toString(root.selectedDate, "MMM d")
+                                }
+                                font.pixelSize: Style.fontSizeXS
+                                color: Color.mOnSurfaceVariant
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        NIconButton {
+                            icon: "chevron-right"
+                            tooltipText: "Next day"
+                            enabled: !root.isToday
+                            opacity: enabled ? 1.0 : 0.3
+                            onClicked: root.shiftDay(1)
+                        }
                     }
+
+                    NDivider { Layout.fillWidth: true }
 
                     ListView {
                         Layout.fillWidth: true
@@ -400,6 +459,7 @@ Item {
                             width: ListView.view.width
                             habitData: modelData
                             pluginCore: root.mainInstance
+                            dateKey: root.selectedKey
                         }
                     }
 
@@ -409,9 +469,9 @@ Item {
                         visible: panelReady && mainInstance.habitDefs.length > 0
                         text: {
                             if (!panelReady) return ""
-                            var done = mainInstance.todayDone.length
+                            var done = mainInstance.doneCountOn(root.selectedKey)
                             var total = mainInstance.habitDefs.length
-                            return done + " / " + total + " done today"
+                            return done + " / " + total + (root.isToday ? " done today" : " done")
                         }
                         font.pixelSize: Style.fontSizeS
                         color: Color.mOnSurfaceVariant

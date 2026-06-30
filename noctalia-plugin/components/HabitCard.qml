@@ -7,9 +7,10 @@ Rectangle {
 
     property var habitData: null      // { id, name, icon }
     property var pluginCore: null
+    property string dateKey: ""       // day this card reads/writes
 
-    readonly property bool done: pluginCore && habitData ? pluginCore.isHabitDone(habitData.id) : false
-    readonly property int streak: pluginCore && habitData ? pluginCore.habitStreak(habitData.id) : 0
+    readonly property bool done: pluginCore && habitData ? pluginCore.doneOn(habitData.id, dateKey) : false
+    readonly property int streak: pluginCore && habitData ? pluginCore.habitStreakOn(habitData.id, dateKey) : 0
 
     height: 52
     radius: Style.radiusM
@@ -21,7 +22,7 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: if (card.pluginCore && card.habitData) card.pluginCore.toggleHabit(card.habitData.id)
+        onClicked: if (card.pluginCore && card.habitData) card.pluginCore.toggleHabitOn(card.habitData.id, card.dateKey)
     }
 
     Row {
