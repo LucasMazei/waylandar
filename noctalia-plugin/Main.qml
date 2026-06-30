@@ -36,8 +36,21 @@ Item {
     // 1-minute ticker fires each call exactly once.
     property var openedCalls: ({})
 
+    // ---- Daily habits (local, vault-backed JSON; independent of Calendar/Tasks) ----
+    // Source of truth is a plain JSON file in the vault, so the daily/shutdown
+    // skills can read it and it syncs across machines. The panel is the writer.
+    readonly property string habitsPath: (pluginApi?.pluginSettings?.habitsFilePath && pluginApi.pluginSettings.habitsFilePath.length > 0)
+        ? pluginApi.pluginSettings.habitsFilePath
+        : ((Quickshell.env("HOME") || "/home/Usuario") + "/Insync/mazei.lucas@gmail.com/Google Drive/Obsidian/Study/5. Daily Journal/habits.json")
+
+    property string todayKey: ""
+    readonly property var habitDefs: habitsAdapter.habits
+    readonly property var habitLog: habitsAdapter.log
+    readonly property var todayDone: (habitLog && habitLog[todayKey]) ? habitLog[todayKey] : []
+
     signal eventsUpdated()
     signal tasksUpdated()
+    signal habitsUpdated()
 
     onPluginApiChanged: {
         if (pluginApi) {
@@ -195,6 +208,10 @@ Item {
         running: true
         repeat: true
         onTriggered: {
+            // Roll the habit day over at midnight so the tab tracks the right date.
+            var tk = _todayKey()
+            if (tk !== todayKey) todayKey = tk
+
             if (notifyReminders) {
                 var now = new Date()
                 for (var i = 0; i < calendarEvents.length; i++) {
@@ -384,6 +401,71 @@ Item {
                 if (text && text.trim().length > 0)
                     Logger.w("Waylandar", "set-status stderr: " + text.trim())
             }
+        }
+    }
+
+    // ---- Habits: local date key + read/write helpers ----
+    function _pad(n) { return (n < 10 ? "0" : "") + n }
+    function dateKey(d) { return d.getFullYear() + "-" + _pad(d.getMonth() + 1) + "-" + _pad(d.getDate()) }
+    function _todayKey() { return dateKey(new Date()) }
+
+    function isHabitDone(id) { return todayDone.indexOf(id) !== -1 }
+
+    // Toggle today's completion for a habit and persist. Reassign the whole log
+    // object (JsonAdapter only notifies on property assignment, not in-place mutation).
+    function toggleHabit(id) {
+        var key = (todayKey && todayKey.length) ? todayKey : _todayKey()
+        var log = {}
+        for (var k in habitLog) log[k] = (habitLog[k] || []).slice()
+        var arr = log[key] || []
+        var i = arr.indexOf(id)
+        if (i === -1) arr.push(id); else arr.splice(i, 1)
+        if (arr.length > 0) log[key] = arr; else delete log[key]
+        habitsAdapter.log = log
+        habitsFile.writeAdapter()
+        habitsUpdated()
+    }
+
+    // Consecutive-day streak ending today. If today isn't done yet, count back
+    // from yesterday so an unfinished today doesn't read as a broken streak.
+    function habitStreak(id) {
+        var streak = 0
+        var d = new Date(); d.setHours(0, 0, 0, 0)
+        if (todayDone.indexOf(id) === -1) d.setDate(d.getDate() - 1)
+        while (true) {
+            var arr = habitLog[dateKey(d)] || []
+            if (arr.indexOf(id) !== -1) { streak++; d.setDate(d.getDate() - 1) }
+            else break
+        }
+        return streak
+    }
+
+    // ---- Habits persistence (vault JSON via Quickshell.Io) ----
+    FileView {
+        id: habitsFile
+        path: root.habitsPath
+        printErrors: false
+        watchChanges: true            // pick up edits from skills / other machines
+        onFileChanged: reload()
+
+        adapter: JsonAdapter {
+            id: habitsAdapter
+            property var habits: [
+                { "id": "language", "name": "Language Learning", "icon": "language" },
+                { "id": "reading",  "name": "Reading",           "icon": "book-2" },
+                { "id": "exercise", "name": "Exercise",          "icon": "barbell" },
+                { "id": "eating",   "name": "Healthy Eating",    "icon": "salad" },
+                { "id": "culto",    "name": "Culto Familiar",    "icon": "cross" }
+            ]
+            property var log: ({})    // { "YYYY-MM-DD": ["habitId", ...] }
+        }
+
+        onLoaded: { root.todayKey = root._todayKey(); root.habitsUpdated() }
+        onLoadFailed: (error) => {
+            // error === 2 → file doesn't exist yet; seed it from the defaults.
+            root.todayKey = root._todayKey()
+            if (error === 2) writeAdapter()
+            root.habitsUpdated()
         }
     }
 

@@ -117,15 +117,21 @@ Item {
                     tabIndex: 1
                     checked: tabBar.currentIndex === 1
                 }
+                NTabButton {
+                    text: "Habits"
+                    icon: "flame"
+                    tabIndex: 2
+                    checked: tabBar.currentIndex === 2
+                }
             }
 
             NDivider { Layout.fillWidth: true }
 
-            // ---- Auth error (shared) ----
+            // ---- Auth error (shown above Events/Tasks; Habits are local so stay usable) ----
             Flickable {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                visible: panelReady && mainInstance.authError.length > 0
+                Layout.preferredHeight: visible ? Math.min(errorText.implicitHeight, 70 * Style.uiScaleRatio) : 0
+                visible: panelReady && mainInstance.authError.length > 0 && tabBar.currentIndex !== 2
                 contentWidth: width
                 contentHeight: errorText.implicitHeight
                 clip: true
@@ -144,7 +150,9 @@ Item {
             StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                visible: panelReady && mainInstance.authError.length === 0
+                // Events/Tasks tabs blank out on auth error (their lists clear);
+                // the Habits tab is local, so the stack itself stays visible.
+                visible: panelReady && (mainInstance.authError.length === 0 || tabBar.currentIndex === 2)
                 currentIndex: tabBar.currentIndex
 
                 // --- Events tab ---
@@ -366,6 +374,47 @@ Item {
                             }
                         }
                     }
+                    }
+                }
+
+                // --- Habits tab ---
+                ColumnLayout {
+                    spacing: Style.marginS
+
+                    NText {
+                        Layout.fillWidth: true
+                        text: panelReady ? Qt.locale().toString(new Date(), "dddd, MMM d") : ""
+                        font.pixelSize: Style.fontSizeS
+                        font.weight: Style.fontWeightBold
+                        color: Color.mPrimary
+                    }
+
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        model: panelReady ? mainInstance.habitDefs : []
+                        spacing: Style.marginS
+                        clip: true
+
+                        delegate: Components.HabitCard {
+                            width: ListView.view.width
+                            habitData: modelData
+                            pluginCore: root.mainInstance
+                        }
+                    }
+
+                    NText {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        visible: panelReady && mainInstance.habitDefs.length > 0
+                        text: {
+                            if (!panelReady) return ""
+                            var done = mainInstance.todayDone.length
+                            var total = mainInstance.habitDefs.length
+                            return done + " / " + total + " done today"
+                        }
+                        font.pixelSize: Style.fontSizeS
+                        color: Color.mOnSurfaceVariant
                     }
                 }
             }
