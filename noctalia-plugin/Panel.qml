@@ -24,6 +24,42 @@ Item {
     property int expandedTaskIndex: -1
     property bool showPastEvents: false
 
+    // ---- Per-tab search ----
+    property string eventQuery: ""
+    property string taskQuery: ""
+
+    function _matches(haystack, q) {
+        if (!q || q.length === 0) return true
+        if (!haystack) return false
+        return ("" + haystack).toLowerCase().indexOf(q.toLowerCase()) !== -1
+    }
+
+    function filterEvents(list, q) {
+        if (!q || q.length === 0) return list || []
+        var out = []
+        for (var i = 0; i < (list ? list.length : 0); i++) {
+            var e = list[i]
+            if (_matches(e.title, q) || _matches(e.description, q) || _matches(e.location, q))
+                out.push(e)
+        }
+        return out
+    }
+
+    function filterTasks(list, q) {
+        if (!q || q.length === 0) return list || []
+        var out = []
+        for (var i = 0; i < (list ? list.length : 0); i++) {
+            var t = list[i]
+            if (_matches(t.title, q) || _matches(t.notes, q) || _matches(t.list, q))
+                out.push(t)
+        }
+        return out
+    }
+
+    readonly property var filteredUpcoming: filterEvents(panelReady ? mainInstance.upcomingEvents : [], eventQuery)
+    readonly property var filteredPast: filterEvents(panelReady ? mainInstance.pastEvents : [], eventQuery)
+    readonly property var filteredTasks: filterTasks(panelReady ? mainInstance.tasks : [], taskQuery)
+
     Item {
         id: panelContainer
         anchors.fill: parent
@@ -112,16 +148,43 @@ Item {
                 currentIndex: tabBar.currentIndex
 
                 // --- Events tab ---
-                Item {
-                    NText {
-                        anchors.centerIn: parent
-                        visible: panelReady && mainInstance.upcomingEvents.length === 0
-                            && mainInstance.pastEvents.length === 0 && !mainInstance.isSyncing
-                        text: "Your schedule is clear!"
-                        font.pixelSize: Style.fontSizeM
-                        font.italic: true
-                        color: Color.mOnSurfaceVariant
+                ColumnLayout {
+                    spacing: Style.marginS
+
+                    NTextInput {
+                        Layout.fillWidth: true
+                        inputIconName: "search"
+                        placeholderText: "Search events…"
+                        onTextChanged: root.eventQuery = text
                     }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        NText {
+                            anchors.centerIn: parent
+                            visible: panelReady && mainInstance.upcomingEvents.length === 0
+                                && mainInstance.pastEvents.length === 0 && !mainInstance.isSyncing
+                            text: "Your schedule is clear!"
+                            font.pixelSize: Style.fontSizeM
+                            font.italic: true
+                            color: Color.mOnSurfaceVariant
+                        }
+
+                        NText {
+                            anchors.centerIn: parent
+                            visible: panelReady && root.eventQuery.length > 0
+                                && root.filteredUpcoming.length === 0 && root.filteredPast.length === 0
+                                && (mainInstance.upcomingEvents.length > 0 || mainInstance.pastEvents.length > 0)
+                            text: "No events match \"" + root.eventQuery + "\""
+                            font.pixelSize: Style.fontSizeM
+                            font.italic: true
+                            color: Color.mOnSurfaceVariant
+                            wrapMode: Text.WrapAnywhere
+                            horizontalAlignment: Text.AlignHCenter
+                            width: parent.width - Style.marginL * 2
+                        }
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -132,7 +195,7 @@ Item {
                         // Collapsible "Earlier" — past / ongoing events, de-emphasised
                         Rectangle {
                             Layout.fillWidth: true
-                            visible: panelReady && mainInstance.pastEvents.length > 0
+                            visible: panelReady && root.filteredPast.length > 0
                             implicitHeight: 30
                             radius: Style.radiusS
                             color: earlierMouse.containsMouse ? Color.mSurfaceVariant : Color.mSurface
@@ -144,12 +207,12 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: Style.marginXS
                                 NText {
-                                    text: root.showPastEvents ? "▾" : "▸"
+                                    text: (root.showPastEvents || root.eventQuery.length > 0) ? "▾" : "▸"
                                     font.pixelSize: Style.fontSizeS
                                     color: Color.mOnSurfaceVariant
                                 }
                                 NText {
-                                    text: panelReady ? "Earlier (" + mainInstance.pastEvents.length + ")" : ""
+                                    text: panelReady ? "Earlier (" + root.filteredPast.length + ")" : ""
                                     font.pixelSize: Style.fontSizeS
                                     font.weight: Style.fontWeightBold
                                     color: Color.mOnSurfaceVariant
@@ -167,8 +230,8 @@ Item {
                         ListView {
                             Layout.fillWidth: true
                             Layout.preferredHeight: visible ? Math.min(contentHeight, 170) : 0
-                            visible: root.showPastEvents && panelReady && mainInstance.pastEvents.length > 0
-                            model: visible ? mainInstance.pastEvents : []
+                            visible: (root.showPastEvents || root.eventQuery.length > 0) && panelReady && root.filteredPast.length > 0
+                            model: visible ? root.filteredPast : []
                             spacing: Style.marginS
                             clip: true
                             opacity: 0.55
@@ -184,13 +247,13 @@ Item {
 
                         NDivider {
                             Layout.fillWidth: true
-                            visible: root.showPastEvents && panelReady && mainInstance.pastEvents.length > 0
+                            visible: (root.showPastEvents || root.eventQuery.length > 0) && panelReady && root.filteredPast.length > 0
                         }
 
                         ListView {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            model: panelReady ? mainInstance.upcomingEvents : []
+                            model: root.filteredUpcoming
                             spacing: Style.marginS
                             clip: true
 
@@ -224,10 +287,24 @@ Item {
                             }
                         }
                     }
+                    }
                 }
 
                 // --- Tasks tab ---
-                Item {
+                ColumnLayout {
+                    spacing: Style.marginS
+
+                    NTextInput {
+                        Layout.fillWidth: true
+                        inputIconName: "search"
+                        placeholderText: "Search tasks…"
+                        onTextChanged: root.taskQuery = text
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
                     NText {
                         anchors.centerIn: parent
                         visible: panelReady && mainInstance.tasks.length === 0 && !mainInstance.isSyncing
@@ -237,9 +314,22 @@ Item {
                         color: Color.mOnSurfaceVariant
                     }
 
+                    NText {
+                        anchors.centerIn: parent
+                        visible: panelReady && root.taskQuery.length > 0
+                            && root.filteredTasks.length === 0 && mainInstance.tasks.length > 0
+                        text: "No tasks match \"" + root.taskQuery + "\""
+                        font.pixelSize: Style.fontSizeM
+                        font.italic: true
+                        color: Color.mOnSurfaceVariant
+                        wrapMode: Text.WrapAnywhere
+                        horizontalAlignment: Text.AlignHCenter
+                        width: parent.width - Style.marginL * 2
+                    }
+
                     ListView {
                         anchors.fill: parent
-                        model: panelReady ? mainInstance.tasks : []
+                        model: root.filteredTasks
                         spacing: Style.marginS
                         clip: true
                         opacity: (panelReady && mainInstance.isSyncing) ? 0.3 : 1.0
@@ -275,6 +365,7 @@ Item {
                                 color: Color.mOutline
                             }
                         }
+                    }
                     }
                 }
             }
